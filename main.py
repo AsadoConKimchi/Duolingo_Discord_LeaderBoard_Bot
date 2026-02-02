@@ -26,25 +26,25 @@ def login(page):
     page.wait_for_timeout(2_000)
     print(f"       현재 페이지: {page.url}")
 
-    # 이메일 입력
+    # 이메일 입력 (placeholder: "Email or username")
     email_input = page.locator(
-        'input[data-test="email-input"], input[type="email"], input[name="email"]'
+        'input[placeholder*="Email"], input[placeholder*="email"], input[data-test="email-input"], input[type="email"]'
     ).first
     email_input.wait_for(state="visible", timeout=15_000)
     email_input.fill(DUOLINGO_EMAIL)
     print("       이메일 입력 완료")
 
-    # 비밀번호 입력
+    # 비밀번호 입력 (placeholder: "Password")
     pwd_input = page.locator(
-        'input[data-test="password-input"], input[type="password"], input[name="password"]'
+        'input[placeholder*="Password"], input[placeholder*="password"], input[type="password"]'
     ).first
     pwd_input.wait_for(state="visible", timeout=15_000)
     pwd_input.fill(DUOLINGO_PASSWORD)
     print("       비밀번호 입력 완료")
 
-    # 로그인 버튼 클릭
+    # 로그인 버튼 클릭 ("LOG IN" 대문자)
     submit_btn = page.locator(
-        'button[data-test="register-button"], button[type="submit"], button:has-text("Log in"), button:has-text("로그인")'
+        'button:has-text("LOG IN"), button:has-text("Log in"), button:has-text("로그인"), button[type="submit"]'
     ).first
     submit_btn.click()
     print("       로그인 버튼 클릭...")
