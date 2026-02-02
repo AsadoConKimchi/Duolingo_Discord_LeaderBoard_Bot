@@ -138,9 +138,15 @@ def format_message(students):
     now = datetime.now(kst)
     date_str = now.strftime("%Y년 %m월 %d일 %H:%M")
 
+    # 월요일(0)이면 주간 리더보드, 그 외엔 일일 리더보드
+    if now.weekday() == 0:
+        title = "🏆 **이번 주 듀오링고 리더보드** 🏆"
+    else:
+        title = "🏆 **오늘의 듀오링고 리더보드** 🏆"
+
     medals = ["🥇", "🥈", "🥉"]
     lines = [
-        "🏆 **오늘의 듀오링고 리더보드** 🏆",
+        title,
         "━━━━━━━━━━━━━━━━━━━━",
     ]
 
