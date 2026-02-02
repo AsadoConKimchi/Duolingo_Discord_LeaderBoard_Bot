@@ -58,7 +58,14 @@ def scrape_leaderboard(page):
     """교실 페이지에서 학생 이름과 XP를 추출한다."""
     print(f"[2/3] 교실 페이지 접속: {CLASSROOM_URL}")
     page.goto(CLASSROOM_URL, wait_until="domcontentloaded", timeout=60_000)
-    page.wait_for_timeout(5_000)  # SPA 렌더링 대기
+
+    # 테이블 행이 로드될 때까지 대기 (최대 30초)
+    print("       테이블 로딩 대기 중...")
+    try:
+        page.wait_for_selector("tbody tr", timeout=30_000)
+        page.wait_for_timeout(3_000)  # 추가 렌더링 대기
+    except PlaywrightTimeout:
+        print("       테이블 로딩 타임아웃")
 
     # 디버그용 스크린샷
     page.screenshot(path="screenshot_classroom.png", full_page=True)
@@ -68,52 +75,28 @@ def scrape_leaderboard(page):
         () => {
             const results = [];
 
-            // ── 전략 1: <table> 기반 추출 ──
+            // 테이블에서 추출: NOMBRE | EXP GANADOS | ...
             for (const row of document.querySelectorAll("tbody tr")) {
                 const cells = [...row.querySelectorAll("td")];
-                const texts = cells.map(c => c.textContent.trim());
-                // "이름", "1,234" 형태의 셀 쌍 탐색
-                for (let i = 1; i < texts.length; i++) {
-                    const xpMatch = texts[i].match(/^([\d,]+)$/);
-                    if (xpMatch) {
-                        const name = texts[i - 1].replace(/^\d+\.?\s*/, "");
-                        if (name) {
-                            results.push({
-                                name,
-                                xp: parseInt(xpMatch[1].replace(/,/g, "")),
-                            });
-                        }
-                        break;
+                if (cells.length >= 2) {
+                    // 첫 번째 셀: 이름 (아바타 이미지 등 제외하고 텍스트만)
+                    const nameCell = cells[0];
+                    const name = nameCell.textContent.trim();
+
+                    // 두 번째 셀: "123 EXP" 또는 "0 EXP" 형태
+                    const xpCell = cells[1];
+                    const xpText = xpCell.textContent.trim();
+                    const xpMatch = xpText.match(/([\d,]+)\s*(?:EXP|XP)/i);
+
+                    if (name && xpMatch) {
+                        results.push({
+                            name: name,
+                            xp: parseInt(xpMatch[1].replace(/,/g, "")),
+                        });
                     }
                 }
             }
-            if (results.length > 0) return results;
 
-            // ── 전략 2: 리스트/카드 기반 추출 ──
-            const candidates = document.querySelectorAll(
-                '[class*="student"], [class*="member"], [class*="row"], [class*="item"], li'
-            );
-            for (const el of candidates) {
-                const text = el.textContent.trim();
-                const m = text.match(/([\w\s\u3131-\uD79D._-]+?)\s+(\d[\d,]*)\s*(?:XP)?$/i);
-                if (m) {
-                    const name = m[1].trim();
-                    const xp = parseInt(m[2].replace(/,/g, ""));
-                    if (name && xp > 0) results.push({ name, xp });
-                }
-            }
-            if (results.length > 0) return results;
-
-            // ── 전략 3: 페이지 전체 텍스트에서 정규식 추출 ──
-            const body = document.body.innerText;
-            const re = /^(.+?)\s+(\d[\d,]*)\s*XP\s*$/gim;
-            let match;
-            while ((match = re.exec(body)) !== null) {
-                results.push({
-                    name: match[1].trim(),
-                    xp: parseInt(match[2].replace(/,/g, "")),
-                });
-            }
             return results;
         }
         """
