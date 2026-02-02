@@ -1,0 +1,44 @@
+name: Duolingo Leaderboard
+
+on:
+  schedule:
+    # 월요일 12:50 KST = 03:50 UTC (주간 리더보드)
+    - cron: "50 3 * * 1"
+    # 화~일 19:00 KST = 10:00 UTC (일일 리더보드)
+    - cron: "0 10 * * 0,2-6"
+  workflow_dispatch: # 수동 실행 지원
+
+jobs:
+  post-leaderboard:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: Run leaderboard bot
+        env:
+          DUOLINGO_EMAIL: ${{ secrets.DUOLINGO_EMAIL }}
+          DUOLINGO_PASSWORD: ${{ secrets.DUOLINGO_PASSWORD }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: python main.py
+
+      - name: Upload debug screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: screenshot_*.png
+          if-no-files-found: ignore
+          retention-days: 7
