@@ -1,9 +1,9 @@
-name: Weekly Duolingo Leaderboard
+name: Daily Duolingo Leaderboard
 
 on:
   schedule:
-    # 매주 월요일 03:50 UTC = 12:50 KST
-    - cron: "50 3 * * 1"
+    # 월~토 19:00 KST = 10:00 UTC (일요일 제외)
+    - cron: "0 10 * * 1-6"
   workflow_dispatch: # 수동 실행 지원
 
 jobs:
