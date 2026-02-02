@@ -22,7 +22,7 @@ DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 def login(page):
     """듀오링고 메인 사이트에서 이메일/비밀번호로 로그인한다."""
     print("[1/3] 듀오링고 로그인 페이지 접속...")
-    page.goto(LOGIN_URL, wait_until="networkidle")
+    page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=60_000)
 
     # 이메일 입력
     email_input = page.locator(
@@ -57,7 +57,7 @@ def login(page):
 def scrape_leaderboard(page):
     """교실 페이지에서 학생 이름과 XP를 추출한다."""
     print(f"[2/3] 교실 페이지 접속: {CLASSROOM_URL}")
-    page.goto(CLASSROOM_URL, wait_until="networkidle")
+    page.goto(CLASSROOM_URL, wait_until="domcontentloaded", timeout=60_000)
     page.wait_for_timeout(5_000)  # SPA 렌더링 대기
 
     # 디버그용 스크린샷
