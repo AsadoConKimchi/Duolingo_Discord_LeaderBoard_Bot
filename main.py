@@ -11,7 +11,7 @@ CLASSROOM_URL = os.getenv(
     "CLASSROOM_URL",
     "https://schools.duolingo.com/classroom/7349589/students",
 )
-LOGIN_URL = "https://www.duolingo.com/log-in"
+SCHOOLS_HOME = "https://schools.duolingo.com"
 
 DUOLINGO_EMAIL = os.getenv("DUOLINGO_EMAIL")
 DUOLINGO_PASSWORD = os.getenv("DUOLINGO_PASSWORD")
@@ -20,37 +20,55 @@ DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 
 # ── 로그인 ─────────────────────────────────────────────
 def login(page):
-    """듀오링고 메인 사이트에서 이메일/비밀번호로 로그인한다."""
-    print("[1/3] 듀오링고 로그인 페이지 접속...")
-    page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=60_000)
+    """Duolingo Schools에 로그인한다."""
+    print("[1/3] Duolingo Schools 접속...")
+    page.goto(SCHOOLS_HOME, wait_until="domcontentloaded", timeout=60_000)
+    page.wait_for_timeout(2_000)
+
+    # LOGIN 버튼 클릭
+    print("       LOGIN 버튼 클릭...")
+    login_link = page.locator('a:has-text("LOGIN"), a:has-text("Log in"), a:has-text("로그인")').first
+    login_link.wait_for(state="visible", timeout=15_000)
+    login_link.click()
+
+    # 로그인 폼 대기
+    page.wait_for_timeout(3_000)
+    print(f"       로그인 페이지: {page.url}")
 
     # 이메일 입력
     email_input = page.locator(
-        'input[data-test="email-input"], input[type="email"]'
+        'input[data-test="email-input"], input[type="email"], input[name="email"]'
     ).first
     email_input.wait_for(state="visible", timeout=15_000)
     email_input.fill(DUOLINGO_EMAIL)
 
     # 비밀번호 입력
     pwd_input = page.locator(
-        'input[data-test="password-input"], input[type="password"]'
+        'input[data-test="password-input"], input[type="password"], input[name="password"]'
     ).first
     pwd_input.wait_for(state="visible", timeout=15_000)
     pwd_input.fill(DUOLINGO_PASSWORD)
 
     # 로그인 버튼 클릭
-    page.locator(
-        'button[data-test="register-button"], button[type="submit"]'
-    ).first.click()
+    submit_btn = page.locator(
+        'button[data-test="register-button"], button[type="submit"], button:has-text("Log in"), button:has-text("로그인")'
+    ).first
+    submit_btn.click()
 
-    # 로그인 완료 대기
-    try:
-        page.wait_for_url("**/learn**", timeout=30_000)
-    except PlaywrightTimeout:
-        # 다른 페이지로 리다이렉트될 수도 있으므로 잠시 대기
-        page.wait_for_timeout(5_000)
+    # 로그인 완료 대기 (schools 대시보드 또는 classroom으로 리다이렉트)
+    print("       로그인 처리 중...")
+    page.wait_for_timeout(5_000)
 
-    print(f"       로그인 완료 → {page.url}")
+    # 로그인 성공 여부 확인 (schools 도메인에 있는지)
+    if "schools.duolingo.com" in page.url:
+        print(f"       로그인 완료 → {page.url}")
+    else:
+        # 아직 로그인 중이면 좀 더 대기
+        try:
+            page.wait_for_url("**/schools.duolingo.com/**", timeout=15_000)
+        except PlaywrightTimeout:
+            pass
+        print(f"       현재 페이지 → {page.url}")
 
 
 # ── 스크래핑 ────────────────────────────────────────────
