@@ -5,7 +5,7 @@ on:
     # 월요일 12:50 KST = 03:50 UTC (주간 리더보드)
     - cron: "50 3 * * 1"
     # 화~일 19:00 KST = 10:00 UTC (일일 리더보드)
-    - cron: "0 10 * * 0,2-6"
+    - cron: "0 10 * * *"
   workflow_dispatch: # 수동 실행 지원
 
 jobs:
