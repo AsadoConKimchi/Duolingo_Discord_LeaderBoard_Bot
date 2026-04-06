@@ -155,87 +155,77 @@ def _try_extract_from_list(items, name_keys, xp_keys):
     return students if len(students) >= 2 else []
 
 
-# ── DOM 스크래핑 폴백 ──────────────────────────────────────
+# ── DOM 스크래핑 (사이드바 리더보드 우선) ─────────────────────
 def scrape_from_dom(page):
-    """API 인터셉션 실패 시 다양한 셀렉터로 DOM 스크래핑을 시도한다."""
-    selectors = [
-        "tbody tr",
-        'div[role="row"]',
-        'tr[class*="student"], tr[class*="member"], tr[class*="user"]',
-        'div[class*="student"], div[class*="member"], div[class*="row"]',
-    ]
+    """사이드바 리더보드 → 메인 테이블 → 전체 텍스트 순으로 추출 시도."""
 
-    for selector in selectors:
-        try:
-            count = page.locator(selector).count()
-            if count > 0:
-                print(f"       [DOM] 셀렉터 '{selector}'로 {count}개 요소 발견")
-                break
-        except Exception:
-            continue
-    else:
-        # 모든 셀렉터 실패 시 페이지 구조 디버깅
-        html_snippet = page.evaluate("() => document.body ? document.body.innerHTML.substring(0, 3000) : 'NO BODY'")
-        print(f"       [DOM] 모든 셀렉터 실패. 페이지 HTML 스니펫:")
-        print(f"       {html_snippet[:2000]}")
-        return []
-
-    # 기존 tbody tr 방식 시도
     students = page.evaluate(
         r"""
         () => {
             const results = [];
 
+            // ── 1순위: 사이드바 리더보드에서 추출 ──
+            // 페이지 전체 텍스트에서 "숫자 XP" 패턴 앞의 이름을 추출
+            // 사이드바 리더보드 항목은 "이름\n숫자 XP" 또는 "이름  숫자 XP" 형태
+            const allText = document.body.innerText;
+            const lines = allText.split('\n').map(l => l.trim()).filter(l => l);
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                // "5436 XP" 형태의 라인 찾기
+                const xpOnlyMatch = line.match(/^([\d,]+)\s*XP$/i);
+                if (xpOnlyMatch && i > 0) {
+                    // 바로 윗 라인이 이름
+                    const name = lines[i - 1].trim();
+                    // 이름이 숫자로만 되어 있거나 너무 짧으면 건너뜀
+                    if (name && name.length > 0 && !/^\d+$/.test(name)
+                        && !name.match(/^\d+\s*XP$/i) && name !== 'Leaderboard'
+                        && name !== 'See all') {
+                        const xp = parseInt(xpOnlyMatch[1].replace(/,/g, ""));
+                        results.push({ name, xp });
+                    }
+                }
+
+                // "이름  5436 XP" 형태 (한 줄에 이름과 XP가 같이 있는 경우)
+                const inlineMatch = line.match(/^(.+?)\s+([\d,]+)\s*XP$/i);
+                if (inlineMatch) {
+                    const name = inlineMatch[1].trim();
+                    if (name && !/^\d+$/.test(name) && name !== 'Leaderboard') {
+                        const xp = parseInt(inlineMatch[2].replace(/,/g, ""));
+                        // 메인 테이블의 0 XP와 구별: 사이드바 데이터만 수집
+                        results.push({ name, xp });
+                    }
+                }
+            }
+
+            // 사이드바에서 XP > 0인 항목이 있으면 그것만 반환 (메인 테이블 0 XP 제외)
+            const withXP = results.filter(s => s.xp > 0);
+            if (withXP.length >= 2) {
+                return withXP;
+            }
+
+            // ── 2순위: 메인 테이블 tbody tr ──
+            const tableResults = [];
             for (const row of document.querySelectorAll("tbody tr")) {
                 const cells = [...row.querySelectorAll("td")];
                 if (cells.length >= 2) {
                     const name = cells[0].textContent.trim();
                     const xpText = cells[1].textContent.trim();
                     const xpMatch = xpText.match(/([\d,]+)\s*(?:EXP|XP)/i);
-
                     if (name && xpMatch) {
-                        results.push({
+                        tableResults.push({
                             name: name,
                             xp: parseInt(xpMatch[1].replace(/,/g, "")),
                         });
                     }
                 }
             }
-
-            // tbody tr에서 못 찾았으면 div role=row 시도
-            if (results.length === 0) {
-                for (const row of document.querySelectorAll('[role="row"]')) {
-                    const cells = [...row.querySelectorAll('[role="cell"], [role="gridcell"]')];
-                    if (cells.length >= 2) {
-                        const name = cells[0].textContent.trim();
-                        const xpText = cells[1].textContent.trim();
-                        const xpMatch = xpText.match(/([\d,]+)\s*(?:EXP|XP)/i);
-                        if (name && xpMatch) {
-                            results.push({
-                                name: name,
-                                xp: parseInt(xpMatch[1].replace(/,/g, "")),
-                            });
-                        }
-                    }
-                }
+            if (tableResults.length >= 2) {
+                return tableResults;
             }
 
-            // 여전히 없으면 숫자+XP 패턴을 페이지 전체에서 탐색
-            if (results.length === 0) {
-                const allText = document.body.innerText;
-                const lines = allText.split('\n').filter(l => l.trim());
-                for (const line of lines) {
-                    const match = line.match(/^(.+?)\s+([\d,]+)\s*(?:EXP|XP)/i);
-                    if (match) {
-                        results.push({
-                            name: match[1].trim(),
-                            xp: parseInt(match[2].replace(/,/g, "")),
-                        });
-                    }
-                }
-            }
-
-            return results;
+            // ── 3순위: 모든 결과 반환 (0 XP 포함) ──
+            return results.length > 0 ? results : tableResults;
         }
         """
     )
@@ -264,6 +254,17 @@ def scrape_leaderboard(page):
     page.on("response", on_response)
     page.goto(CLASSROOM_URL, wait_until="domcontentloaded", timeout=60_000)
     page.wait_for_timeout(10_000)  # SPA 렌더링 및 API 호출 대기
+
+    # "See all" 클릭하여 사이드바 리더보드 전체 확장
+    try:
+        see_all = page.locator('text="See all"').first
+        if see_all.is_visible(timeout=3_000):
+            see_all.click()
+            print("       'See all' 클릭 → 리더보드 확장")
+            page.wait_for_timeout(3_000)
+    except Exception:
+        print("       'See all' 버튼 미발견 또는 클릭 실패 (무시)")
+
     page.screenshot(path="screenshot_03_classroom.png", full_page=True)
 
     print(f"       캡처된 API 응답 수: {len(captured)}")
@@ -401,16 +402,18 @@ def main():
 
                 if attempt < MAX_RETRIES:
                     print(f"\n       재시도 {attempt + 1}/{MAX_RETRIES} (오류: {exc})")
-                    context.close()
-                    continue
                 else:
                     print(f"Error: 최대 재시도 횟수 초과. 마지막 오류: {exc}")
                     traceback.print_exc()
+                    context.close()
                     browser.close()
                     sys.exit(1)
 
             finally:
-                context.close()
+                try:
+                    context.close()
+                except Exception:
+                    pass
 
         browser.close()
 
